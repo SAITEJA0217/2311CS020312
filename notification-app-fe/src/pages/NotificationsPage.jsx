@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Alert,
   Badge,
@@ -11,24 +11,38 @@ import {
 } from "@mui/material";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 
-import { NotificationCard } from "../components/NotificationCard";
-import { NotificationFilter } from "../components/NotificationFilter";
+import NotificationCard from "../components/NotificationCard";
+import NotificationFilter from "../components/NotificationFilter";
 import { useNotifications } from "../hooks/useNotifications";
+import { logEvent } from "../utils/logger";
 
 export function NotificationsPage() {
-  const [filter, setFilter] = useState();
-  const [page, setPage] = useState("1");
+  const [filter, setFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
-  const { notifications, totalPages, loading, error } = useNotifications();
+  const { notifications, topTen, loading, error } = useNotifications(page, limit, filter);
 
-  const unreadCount = 2;
+  // Fallback for totalPages if your API doesn't return it yet
+  const totalPages = 10; 
+  const unreadCount = notifications ? notifications.length : 0;
 
-  const handleFilterChange = (newFilter) => {
+  // 3. Page Load Logging
+  useEffect(() => {
+    logEvent({ stack: 'frontend', level: 'info', pkg: 'ui', message: 'Notifications Page opened' });
+  }, []);
 
+  const handleFilterChange = (_, newFilter) => {
+    const selectedFilter = newFilter || 'All';
+    setFilter(selectedFilter);
+    setPage(1);
+    logEvent({ stack: 'frontend', level: 'info', pkg: 'ui', message: `Filter changed to: ${selectedFilter}` });
   };
 
+  // 5. Handle Pagination with Logging
   const handlePageChange = (_, newPage) => {
-
+    setPage(newPage);
+    logEvent({ stack: 'frontend', level: 'info', pkg: 'ui', message: `Pagination changed to page: ${newPage}` });
   };
 
   return (
@@ -48,29 +62,53 @@ export function NotificationsPage() {
         <NotificationFilter value={filter} onChange={handleFilterChange} />
       </Box>
 
-      {true && (
+      {/* FIXED: Loading State */}
+      {loading && (
         <Box display="flex" justifyContent="center" py={6}>
           <CircularProgress />
         </Box>
       )}
 
+      {/* FIXED: Error State */}
       {!loading && error && (
-        <Alert severity="error">Failed to load notifications: {error}</Alert>
+        <Alert severity="error" sx={{ mb: 3 }}>Failed to load notifications: {error}</Alert>
       )}
 
-      {loading && !error && notifications.length == "0" && (
-        <Alert severity="info">Something message</Alert>
+      {/* FIXED: Empty State */}
+      {!loading && !error && notifications?.length === 0 && (
+        <Alert severity="info">No notifications found for this filter.</Alert>
       )}
 
-      {loading && !error && notifications.length > 0 && (
+      {/* FIXED: Render Data & Top 10 Priority */}
+      {!loading && !error && notifications?.length > 0 && (
         <Stack spacing={1.5}>
+          {/* Phase 5/7 Requirement: Priority Top 10 */}
+          {page === 1 && topTen?.length > 0 && filter === 'All' && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" fontWeight={700} color="primary" sx={{ mb: 1 }}>
+                Priority Top 10
+              </Typography>
+              <Stack spacing={1.5}>
+                {topTen.map((n) => (
+                  <NotificationCard key={`top-${n.id}`} notification={n} isPriorityView={true} />
+                ))}
+              </Stack>
+              <Divider sx={{ mt: 3 }} />
+            </Box>
+          )}
+
+          {/* Regular Paginated Notifications */}
+          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
+            All Notifications
+          </Typography>
           {notifications.map((n) => (
-            <></>
+            <NotificationCard key={n.id} notification={n} />
           ))}
         </Stack>
       )}
 
-      {!loading && (
+      {/* FIXED: Pagination */}
+      {!loading && !error && notifications?.length > 0 && (
         <Box display="flex" justifyContent="center" mt={4}>
           <Pagination
             count={totalPages}
